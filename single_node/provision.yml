@@ -1,6 +1,6 @@
 # provision.yml
 
-- name: Provision machine
+- name: Provision base packages for machine
   hosts: "all"
   become: true
   
@@ -22,11 +22,41 @@
           - nano
           - bash-completion
           - nmap
+          - apt-transport-https
+          - socat
 
     - name: Update all packages to the latest version
       apt:
         upgrade: dist
 
+- name: Provision roles for machine
+  hosts: "all"
+  become: true
+  
+  roles:
+    - name: Install docker
+      role: "nickjj.docker"
+      tags: ["docker"]
+      vars:
+        docker__edition: "ce"
+        docker__channel: ["stable"]
+        docker__version: "18.09.3"
+        #docker__version: "18.06.1"
+
+    - name: Install oh-my-zsh
+      role: gantsign.oh-my-zsh
+      users:
+        - username: vagrant
+          oh_my_zsh:
+            theme: robbyrussell
+            plugins:
+              - git        
+
+- name: Install dotfiles 
+  hosts: "all"
+  become: true
+  
+  tasks:            
     - name: Clone dotfiles
       git:
         repo: 'https://github.com/chrisguest75/default_dotfiles.git'
@@ -37,19 +67,19 @@
       shell: /home/vagrant/Code/default_dotfiles/install.sh 
       become_user: vagrant
 
-  roles:
-    - role: "nickjj.docker"
-      tags: ["docker"]
-      vars:
-        docker__edition: "ce"
-        docker__channel: ["stable"]
-        docker__version: "18.09.3"
-        #docker__version: "18.06.1"
+    - name: Install kubernetes snaps with option --classic
+      snap:
+        name: 
+          - kubeadm
+          - kubelet
+          - kubectl
+        classic: yes
 
-    - role: gantsign.oh-my-zsh
-      users:
-        - username: vagrant
-          oh_my_zsh:
-            theme: robbyrussell
-            plugins:
-              - git        
+    # - name: Pull images 
+    #   shell: |
+    #     kubeadm config images pull
+    #   args:
+    #     executable: /usr/bin/zsh
+    #   become_user: vagrant
+
+    
