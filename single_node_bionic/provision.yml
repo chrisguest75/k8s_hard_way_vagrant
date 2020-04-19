@@ -11,6 +11,7 @@
 
     - name: apt install basics
       apt: 
+        update_cache: true
         pkg:
           - debian-goodies
           - needrestart
@@ -23,11 +24,23 @@
           - bash-completion
           - nmap
           - apt-transport-https
+          - python3-pip
           - socat
+          - conntrack
 
     - name: Update all packages to the latest version
       apt:
         upgrade: dist
+
+    - name: Disable swap
+      shell: |
+        swapoff -a
+
+    - name: Disable swap in fstab 
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+        replace: '# \1'
 
 - name: Provision roles for machine
   hosts: "all"
@@ -82,4 +95,4 @@
     #     executable: /usr/bin/zsh
     #   become_user: vagrant
 
-    
+    # sudo shutdown -r now  

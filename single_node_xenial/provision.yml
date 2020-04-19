@@ -1,0 +1,148 @@
+# provision.yml
+
+- name: Provision base packages for machine
+  hosts: "all"
+  become: true
+  
+  tasks:
+    - name: Variables
+      debug: 
+        msg: | 
+          "docker_install : {{ docker_install }}"
+          "kubeadm_init_ignore_errors : {{ kubeadm_init_ignore_errors }}"
+
+    - name: get hostname
+      shell: hostname
+      register: hostname
+
+    - name: apt install basics
+      apt: 
+        update_cache: true
+        pkg:
+          - debian-goodies
+          - needrestart
+          - debsecan
+          - debsums
+          - curl 
+          - git 
+          - zsh
+          - nano
+          - bash-completion
+          - nmap
+          - apt-transport-https
+          - python3-pip
+          - socat
+          - conntrack
+
+    - name: Update all packages to the latest version
+      apt:
+        upgrade: dist
+
+    - name: Disable swap
+      shell: |
+        swapoff -a
+
+    - name: Disable swap in fstab 
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+
+- name: Provision roles for machine
+  hosts: "all"
+  become: true
+  
+  roles:
+    - name: Install docker
+      role: "nickjj.docker"
+      tags: ["docker"]
+      vars:
+        docker__edition: "ce"
+        docker__channel: ["stable"]
+        docker__version: "18.09.3"
+        docker__state: "present"   
+        docker__pip_docker_state: "present"
+        docker__pip_docker_compose_state: "present"             
+      when: docker_install
+
+    - name: Install oh-my-zsh
+      role: gantsign.oh-my-zsh
+      users:
+        - username: vagrant
+          oh_my_zsh:
+            theme: robbyrussell
+            plugins:
+              - git        
+
+- name: Install dotfiles 
+  hosts: "all"
+  become: true
+  
+  tasks:            
+    - name: Clone dotfiles
+      git:
+        repo: 'https://github.com/chrisguest75/default_dotfiles.git'
+        dest: /home/vagrant/Code/default_dotfiles
+      become_user: vagrant
+
+    - name: Install dotfiles
+      shell: /home/vagrant/Code/default_dotfiles/install.sh 
+      become_user: vagrant
+
+- name: Install kubernetes
+  hosts: "all"
+  become: true
+  
+  tasks:            
+    - name: add apt key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: add apt repo
+      apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+
+    - name: apt install k8s
+      apt: 
+        update_cache: true
+        pkg:
+          - kubelet
+          - kubeadm
+          - kubectl
+
+    - name: Pull images 
+      shell: |
+        kubeadm config images pull
+      args:
+        executable: /usr/bin/zsh
+
+    - name: kubeadm init
+      shell: |
+        kubeadm init
+      args:
+        executable: /usr/bin/zsh
+      ignore_errors: "{{ kubeadm_init_ignore_errors }}"        
+
+    - name: kubectl config folder
+      shell: |
+        mkdir -p /home/vagrant/.kube
+      args:
+        executable: /usr/bin/zsh
+      become_user: vagrant
+
+    - name: kubectl config copy
+      shell: |
+        cp /etc/kubernetes/admin.conf /home/vagrant/.kube/config        
+      args:
+        executable: /usr/bin/zsh
+
+    - name: change permissions on config
+      shell: |        
+        chown $(id -u):$(id -g) /home/vagrant/.kube/config
+      args:
+        executable: /usr/bin/zsh
+      #become_user: vagrant
+
+    # sudo shutdown -r now  
